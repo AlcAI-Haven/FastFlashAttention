@@ -1,0 +1,12 @@
+# FastFlashAttention runtime needs PyTorch + Triton with a CUDA build matching
+# your GPU. They are NOT pinned here because the right wheel depends on your
+# CUDA/platform. This project was developed and tuned on:
+#
+#   torch 2.12.1+cu130   (pip install torch --index-url https://download.pytorch.org/whl/cu130)
+#   triton-windows 3.7.1 (Windows) / triton>=3.0 (Linux)
+#   CUDA 13.0, NVIDIA RTX 5090 (Blackwell, sm_120)
+#
+# Install torch+triton first, then:  pip install -e .
+#
+# flash-attn (2.8.4 here) is only needed to RUN the benchmarks in bench/,
+# never to use the kernel:  pip install -e ".[bench]"

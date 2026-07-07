@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastflash-attention"
+version = "0.1.0"
+description = "FastFlashAttention: drop-in exact bf16 flash-attention for CUDA with a deterministic backward, tuned for Blackwell (sm_120 / RTX 5090)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "AlcAI-AnimeHaven" }]
+keywords = ["attention", "flash-attention", "triton", "cuda", "bfloat16", "blackwell", "sm_120", "deterministic"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+# torch and triton are intentionally NOT hard dependencies: install them first
+# for your platform/CUDA (see README), then `pip install -e .`.
+dependencies = []
+
+[project.optional-dependencies]
+runtime = ["torch>=2.4", "triton>=3.0"]
+test = ["pytest>=7"]
+bench = ["flash-attn>=2.6"]
+
+[project.urls]
+Homepage = "https://github.com/AlcAI-Haven/FastFlashAttention"
+
+[tool.setuptools]
+packages = ["fastflash_attention"]
+
+[tool.setuptools.package-data]
+fastflash_attention = ["py.typed"]
