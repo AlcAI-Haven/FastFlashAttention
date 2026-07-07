@@ -1,6 +1,6 @@
 # FastFlashAttention
 
-**Drop-in exact bf16 flash-attention for CUDA — one fused Triton kernel with a fast forward across all sequence lengths and a *deterministic* (non-atomic) backward.** Tuned on an RTX 5090 (Blackwell / sm_120), where its forward beats FlashAttention-2 and its deterministic backward beats FA2's deterministic backward.
+**Drop-in exact bf16 flash-attention for CUDA — one fused Triton kernel with a fast forward across all sequence lengths and a *deterministic* (non-atomic) backward.** Tuned on a **consumer GeForce RTX 5090** (Blackwell GB202, **sm_120**), where its forward beats FlashAttention-2 and its deterministic backward beats FA2's deterministic backward.
 
 The public surface mirrors `torch.nn.functional.scaled_dot_product_attention`, so adoption is a textual swap at any SDPA call site.
 
@@ -12,6 +12,7 @@ An optimized **exact** attention kernel (not an approximation): fp32-faithful so
 - **Backward:** bitwise-**deterministic** by construction (disjoint writes, no global atomics). Beats FA2's *deterministic* backward by **1.2–2.3×** (D=128), and reaches **~0.80–0.96×** of FA2's *default* (non-deterministic, atomic) backward.
 - **Full training step (fwd+bwd):** beats FA2-deterministic by **1.4–2.1×**, and is roughly par with FA2-default (**0.86–1.18×**, faster at short context).
 - **Scope:** exact attention only, with a strict input contract (below) and no hidden slow path.
+- **Hardware:** tuned for the **consumer GeForce RTX 5090 (GB202, sm_120)** — *not* datacenter Blackwell (GB100/GB200, sm_100). It uses the standard sm_120 tensor-core MMA that Triton emits, and does **not** rely on datacenter-only 5th-gen tensor-core features (`tcgen05` MMA / tensor-memory, the `sm_100a` path). It runs on other CUDA GPUs, but the autotuned block/warp choices are picked for sm_120 and may be suboptimal elsewhere.
 
 ## Install
 
@@ -130,6 +131,30 @@ Min–max of the FA2 / FastFlashAttention ratio over the six sequence lengths (>
 Forward wins in every cell. The deterministic backward beats FA2-deterministic everywhere except the smallest D=64 case (N=512, 0.72×), and stays within ~0.6–1.0× of FA2's faster non-deterministic default. Full per-N numbers: run `python -m bench.benchmark` (writes `results/benchmark.jsonl`).
 
 </details>
+
+## Memory
+
+FastFlashAttention runs natively in `[B, H, S, D]` (the SDPA layout) with output-only scratch, so **at inference it uses ~30–43% less peak VRAM than FlashAttention-2** at the same N. This is intrinsic, not a layout artifact — FA2 fed already-seq-major inputs measures the same. The training step is the deliberate trade in the other direction: the **deterministic backward stores a `dS` tile** (to avoid recomputation and global atomics — the source of its speed *and* bit-exactness), so its peak is **higher at N ≥ 2048**.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/memory_dark.png">
+    <img alt="Peak GPU memory vs FlashAttention-2 — forward (inference) uses less, full training step uses more at long N (causal, D=128)." src="assets/memory_light.png" width="90%">
+  </picture>
+</p>
+
+Peak allocated VRAM (MB), causal D=128, B=4 H=16. `Δ vs FA2` is negative when FastFlashAttention uses **less**. Reproduce with `python -m bench.mem` (each point measured in a fresh process).
+
+| N | Fwd (MB) | FA2 fwd (MB) | Δ vs FA2 | Train (MB) | FA2 train (MB) | Δ vs FA2 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 512 | 34 | 59 | **−43%** | 93 | 135 | −31% |
+| 1024 | 67 | 118 | **−43%** | 185 | 269 | −31% |
+| 2048 | 134 | 235 | **−43%** | 907 | 538 | +69% |
+| 4096 | 336 | 471 | **−29%** | 2888 | 1076 | +168% |
+| 8192 | 671 | 942 | **−29%** | 3628 | 2152 | +69% |
+| 16384 | 1342 | 1883 | **−29%** | 5109 | 4303 | +19% |
+
+If inference / KV-cache memory is your constraint, FastFlashAttention is a clear win; if training-step peak memory is the binding constraint at long context, that extra `dS` storage is the price of the deterministic, faster backward.
 
 ## Determinism
 

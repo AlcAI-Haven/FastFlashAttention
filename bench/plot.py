@@ -117,9 +117,75 @@ def make_figure(mode):
     print("wrote", out)
 
 
+def _fmt_mb(v):
+    return f"{v / 1000:.1f} GB" if v >= 1000 else f"{v:.0f} MB"
+
+
+def _mem_panel(ax, title, xs, ours, fa2, xlabels, c):
+    for ys, color in ((fa2, c["orange"]), (ours, c["blue"])):
+        ax.plot(xs, ys, "-o", color=color, lw=2.0, ms=6.5, mfc=color,
+                mec=c["surface"], mew=1.0, zorder=3)
+    ax.annotate(_fmt_mb(ours[-1]), (xs[-1], ours[-1]), textcoords="offset points",
+                xytext=(6, 0), va="center", ha="left", fontsize=8.5, color=c["muted"])
+    ax.annotate(_fmt_mb(fa2[-1]), (xs[-1], fa2[-1]), textcoords="offset points",
+                xytext=(6, 0), va="center", ha="left", fontsize=8.5, color=c["muted"])
+    ax.set_title(title, fontsize=12, color=c["ink"], pad=8)
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(xlabels, fontsize=8.5, color=c["muted"])
+    ax.tick_params(axis="y", labelsize=8.5, colors=c["muted"], length=0)
+    ax.tick_params(axis="x", length=0)
+    ax.grid(axis="y", color=c["grid"], lw=0.8, zorder=0)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.margins(x=0.18)
+    ax.set_ylim(bottom=0)
+    ax.set_facecolor(c["surface"])
+
+
+def make_memory_figure(mode):
+    from matplotlib.lines import Line2D
+    c = THEME[mode]
+    rows = [json.loads(l) for l in open(ROOT / "results" / "memory.jsonl", encoding="utf-8")]
+    rows.sort(key=lambda r: r["config"]["S"])
+    xs = [r["config"]["S"] for r in rows]
+    xlabels = [_fmt_n(n) for n in xs]
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.1))
+    fig.patch.set_facecolor(c["surface"])
+    fig.subplots_adjust(top=0.72, bottom=0.16, left=0.085, right=0.955, wspace=0.2)
+
+    _mem_panel(axes[0], "Forward (inference)", xs,
+               [r["fwd"]["ours_mb"] for r in rows], [r["fwd"]["fa2_mb"] for r in rows], xlabels, c)
+    _mem_panel(axes[1], "Full training step (fwd+bwd)", xs,
+               [r["train"]["ours_mb"] for r in rows], [r["train"]["fa2_mb"] for r in rows], xlabels, c)
+    axes[0].set_ylabel("peak GPU memory  (lower is better)", fontsize=9.5, color=c["muted"])
+
+    handles = [
+        Line2D([0], [0], color=c["blue"], lw=2.4, marker="o", ms=6, mec=c["surface"],
+               label="FastFlashAttention"),
+        Line2D([0], [0], color=c["orange"], lw=2.4, marker="o", ms=6, mec=c["surface"],
+               label="FlashAttention-2"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=2, frameon=False,
+               fontsize=9, bbox_to_anchor=(0.5, 0.005), labelcolor=c["muted"])
+    fig.text(0.5, 0.92, "Peak GPU memory vs FlashAttention-2  ·  RTX 5090 (sm_120)  ·  causal, D=128, bf16",
+             ha="center", fontsize=12, color=c["ink"])
+    fig.text(0.5, 0.845, "inference: ~30–43% less memory · training: the deterministic backward stores a dS tile, so it costs more at N ≥ 2048",
+             ha="center", fontsize=8.5, color=c["muted"])
+
+    ASSETS.mkdir(exist_ok=True)
+    out = ASSETS / f"memory_{mode}.png"
+    fig.savefig(out, dpi=200, facecolor=c["surface"])
+    plt.close(fig)
+    print("wrote", out)
+
+
 def main():
     for mode in ("light", "dark"):
         make_figure(mode)
+        if (ROOT / "results" / "memory.jsonl").exists():
+            make_memory_figure(mode)
 
 
 if __name__ == "__main__":
