@@ -71,6 +71,15 @@ pip install -e ".[bench]"
 python -m bench.benchmark        # full grid; add --quick for a smoke test
 ```
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/speedup_dark.png">
+    <img alt="FastFlashAttention speedup over FlashAttention-2 across sequence length — forward, backward, and full training step (causal, D=128). Above the parity line means FastFlashAttention is faster." src="assets/speedup_light.png" width="100%">
+  </picture>
+</p>
+
+<p align="center"><sub>Speedup = FA2 / FastFlashAttention wall time (>1 = FastFlashAttention faster). Regenerate with <code>python -m bench.plot</code>.</sub></p>
+
 ### Forward (causal, D=128)
 
 | N | FastFlashAttention (ms) | FA2 (ms) | ratio | % roofline |
@@ -106,49 +115,21 @@ Both sides deterministic on the `-det` columns. `ratio_det` is the apples-to-app
 | 8192 | 20.331 | 38.764 | **1.91×** | 18.497 | 0.91× |
 | 16384 | 82.334 | 170.402 | **2.07×** | 70.931 | 0.86× |
 
-### Full grid (all D and causal settings)
+<details>
+<summary><b>All configurations</b> — speedup ranges across N = 512…16384 (head_dim ∈ {64, 128} × causal / non-causal)</summary>
 
-Raw output of `python -m bench.benchmark` — `r_*` columns are FA2/FastFlashAttention (>1 = faster); `_def` = vs FA2-default, `_det` = vs FA2-deterministic.
+Min–max of the FA2 / FastFlashAttention ratio over the six sequence lengths (>1 = FastFlashAttention faster).
 
-```
-# regime=fwd/bwd/step  causal=True  D=64  B=4 H=16
-     N |   ff_fwd  fa2_fwd  r_fwd |   ff_bwd  fa2_bwd  r_def fa2d_bwd  r_det |  ff_step fa2_step rs_def fa2d_step rs_det
-   512 |   0.0484   0.0858  1.775 |   0.2687   0.1656  0.616   0.1936  0.721 |   0.2452   0.3963  1.616    0.3545  1.446
-  1024 |   0.0836   0.1234  1.476 |   0.2618    0.249  0.951   0.3259  1.245 |   0.3348   0.3854  1.151    0.4701  1.404
-  2048 |   0.2076   0.2749  1.324 |   0.6769   0.5898  0.871   0.9006   1.33 |   0.8376   0.7923  0.946    1.1167  1.333
-  4096 |   0.6956   0.8066   1.16 |   2.2154   1.8825   0.85   3.0978  1.398 |   2.8038   2.5641  0.915    3.8168  1.361
-  8192 |   2.5345    2.721  1.074 |   8.9859   6.6687  0.742  11.7782  1.311 |  11.5982   9.5629  0.825     14.33  1.236
- 16384 |   9.9066  10.3255  1.042 |  35.8458  25.5077  0.712  46.6762  1.302 |  45.4103  35.4411   0.78   56.5716  1.246
+| Config | Forward | Backward vs FA2-det | Backward vs FA2-default | Step vs FA2-det | Step vs FA2-default |
+|---|---|---|---|---|---|
+| causal, D=128 | 1.07–1.30× | 1.22–2.28× | 0.80–0.96× | 1.37–2.07× | 0.86–1.18× |
+| causal, D=64 | 1.04–1.78× | 0.72–1.40× | 0.62–0.95× | 1.24–1.45× | 0.78–1.62× |
+| non-causal, D=128 | 1.04–1.26× | 1.13–2.36× | 0.79–0.98× | 1.20–1.98× | 0.86–1.06× |
+| non-causal, D=64 | 1.00–1.48× | 1.20–1.35× | 0.72–1.02× | 1.18–1.58× | 0.78–1.42× |
 
-# regime=fwd/bwd/step  causal=True  D=128  B=4 H=16
-     N |   ff_fwd  fa2_fwd  r_fwd |   ff_bwd  fa2_bwd  r_def fa2d_bwd  r_det |  ff_step fa2_step rs_def fa2d_step rs_det
-   512 |    0.076   0.0939  1.236 |   0.1882   0.1744  0.927    0.229  1.217 |   0.2687   0.3176  1.182    0.3671  1.366
-  1024 |   0.1516   0.1965  1.296 |   0.4326   0.3735  0.863   0.6621  1.531 |   0.5361   0.4987   0.93    0.7932   1.48
-  2048 |    0.421   0.5218   1.24 |   1.0852   1.0373  0.956   2.3048  2.124 |   1.4199   1.4762   1.04    2.7253  1.919
-  4096 |   1.3641   1.5896  1.165 |   3.7315   3.5122  0.941   8.5222  2.284 |   5.0257    4.994  0.994    9.9081  1.971
-  8192 |   5.0728   5.4809   1.08 |  15.3092  13.1042  0.856  33.3843  2.181 |  20.3306  18.4974   0.91   38.7636  1.907
- 16384 |  19.4756  20.8246  1.069 |  62.6423  49.9351  0.797   132.86  2.121 |  82.3344  70.9306  0.861  170.4016   2.07
+Forward wins in every cell. The deterministic backward beats FA2-deterministic everywhere except the smallest D=64 case (N=512, 0.72×), and stays within ~0.6–1.0× of FA2's faster non-deterministic default. Full per-N numbers: run `python -m bench.benchmark` (writes `results/benchmark.jsonl`).
 
-# regime=fwd/bwd/step  causal=False  D=64  B=4 H=16
-     N |   ff_fwd  fa2_fwd  r_fwd |   ff_bwd  fa2_bwd  r_def fa2d_bwd  r_det |  ff_step fa2_step rs_def fa2d_step rs_det
-   512 |   0.0542   0.0799  1.475 |   0.1523    0.155  1.018   0.1965   1.29 |   0.2207   0.3124  1.416    0.3492  1.582
-  1024 |   0.1122   0.1465  1.306 |   0.3583   0.3334  0.931   0.4294  1.198 |   0.4784   0.4901  1.024    0.5649  1.181
-  2048 |   0.3388   0.4032   1.19 |   1.1888   0.9977  0.839   1.5703  1.321 |   1.4221    1.298  0.913    1.8625   1.31
-  4096 |   1.2306   1.3384  1.088 |   3.9973   3.3316  0.833   5.4019  1.351 |   5.1665   4.5629  0.883    6.6129   1.28
-  8192 |   4.7573   4.8856  1.027 |  15.9051  12.2538   0.77  20.9283  1.316 |  20.6395  17.0469  0.826   25.6948  1.245
- 16384 |  18.6905  18.7004  1.001 |  65.8158  47.1465  0.716  89.1114  1.354 |  84.5147  65.7692  0.778  106.1956  1.257
-
-# regime=fwd/bwd/step  causal=False  D=128  B=4 H=16
-     N |   ff_fwd  fa2_fwd  r_fwd |   ff_bwd  fa2_bwd  r_def fa2d_bwd  r_det |  ff_step fa2_step rs_def fa2d_step rs_det
-   512 |   0.0988   0.1088  1.101 |   0.2563   0.2097  0.818   0.2886  1.126 |   0.3577   0.3775  1.055    0.4297  1.201
-  1024 |   0.2204   0.2783  1.263 |   0.7521   0.5915  0.786   1.1663  1.551 |   0.8652   0.7563  0.874    1.3376  1.546
-  2048 |   0.6968   0.8172  1.173 |   1.8674   1.8319  0.981    4.193  2.245 |    2.461   2.5367  1.031    4.8474   1.97
-  4096 |   2.4955   2.7578  1.105 |   6.9941   6.4915  0.928  15.6969  2.244 |   9.4322    9.171  0.972   18.2489  1.935
-  8192 |   9.4854  10.1479   1.07 |   28.779  24.6036  0.855  64.2439  2.232 |   38.187  34.6436  0.907   75.2939  1.972
- 16384 |  37.4032  38.7926  1.037 | 119.3157  95.9693  0.804 282.0241  2.364 | 156.9293  134.626  0.858  311.1204  1.983
-```
-
-Reading the grid: forward is faster than FA2 in every cell. The deterministic backward beats FA2-deterministic everywhere except the smallest D=64 case (N=512), and closes most of the gap to FA2's faster non-deterministic default. At the full-step level FastFlashAttention wins outright against FA2-deterministic and is competitive with FA2-default, pulling ahead at short context.
+</details>
 
 ## Determinism
 
