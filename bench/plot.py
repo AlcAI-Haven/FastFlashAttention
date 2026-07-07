@@ -181,11 +181,63 @@ def make_memory_figure(mode):
     print("wrote", out)
 
 
+def make_og_card():
+    """1280x640 social-preview card (GitHub Settings -> Social preview)."""
+    c = THEME["dark"]
+    bench = ROOT / "results" / "benchmark.jsonl"
+    mem = ROOT / "results" / "memory.jsonl"
+    b = [json.loads(l) for l in open(bench, encoding="utf-8")]
+    cd = [r for r in b if r["config"]["causal"] and r["config"]["D"] == 128]
+    fwd = [r["fwd"]["ratio"] for r in cd]
+    det = [r["bwd"]["ratio_det"] for r in cd]
+    if mem.exists():
+        m = [json.loads(l) for l in open(mem, encoding="utf-8")]
+        sav = [r["fwd"]["pct_save"] for r in m]
+        mem_stat = (f"{min(sav):.0f}–{max(sav):.0f}%", "less inference VRAM", c["blue"])
+    else:
+        mem_stat = ("30–43%", "less inference VRAM", c["blue"])
+
+    tiles = [
+        (f"{min(fwd):.2f}–{max(fwd):.2f}×", "faster forward vs FA2", c["orange"]),
+        (f"{min(det):.1f}–{max(det):.1f}×", "faster deterministic backward", c["blue"]),
+        mem_stat,
+    ]
+
+    fig = plt.figure(figsize=(12.8, 6.4), dpi=100)
+    fig.patch.set_facecolor(c["surface"])
+    fig.text(0.06, 0.80, "FastFlashAttention", fontsize=52, color=c["ink"], va="center")
+    fig.text(0.062, 0.655,
+             "Drop-in exact bf16 flash-attention with a deterministic backward",
+             fontsize=21, color="#e8e7dd", va="center")
+    fig.text(0.062, 0.585,
+             "tuned for the consumer GeForce RTX 5090  ·  Blackwell sm_120",
+             fontsize=17, color=c["muted"], va="center")
+    for i, (num, label, col) in enumerate(tiles):
+        x = 0.20 + i * 0.30
+        fig.text(x, 0.34, num, fontsize=38, color=col, ha="center", va="center")
+        fig.text(x, 0.225, label, fontsize=15, color="#e8e7dd", ha="center", va="center")
+        if i:
+            div = 0.20 + (i - 0.5) * 0.30
+            fig.add_artist(plt.Line2D([div, div], [0.19, 0.38], color=c["grid"], lw=1.2))
+    fig.text(0.06, 0.075, "github.com/AlcAI-Haven/FastFlashAttention",
+             fontsize=15, color=c["muted"], va="center")
+    fig.text(0.94, 0.075, "exact softmax · bitwise-deterministic · MIT",
+             fontsize=13, color=c["muted"], va="center", ha="right")
+
+    ASSETS.mkdir(exist_ok=True)
+    out = ASSETS / "og_card.png"
+    fig.savefig(out, dpi=100, facecolor=c["surface"])
+    plt.close(fig)
+    print("wrote", out)
+
+
 def main():
     for mode in ("light", "dark"):
         make_figure(mode)
         if (ROOT / "results" / "memory.jsonl").exists():
             make_memory_figure(mode)
+    if (ROOT / "results" / "benchmark.jsonl").exists():
+        make_og_card()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,11 @@
 # FastFlashAttention
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![CUDA: sm_120 · RTX 5090](https://img.shields.io/badge/CUDA-sm__120%20%C2%B7%20RTX%205090-76B900.svg)](#status)
+[![Kernel: Triton](https://img.shields.io/badge/kernel-Triton-EE4C2C.svg)](https://github.com/triton-lang/triton)
+[![Backward: deterministic](https://img.shields.io/badge/backward-deterministic-2a78d6.svg)](#determinism)
+
 **Drop-in exact bf16 flash-attention for CUDA — one fused Triton kernel with a fast forward across all sequence lengths and a *deterministic* (non-atomic) backward.** Tuned on a **consumer GeForce RTX 5090** (Blackwell GB202, **sm_120**), where its forward beats FlashAttention-2 and its deterministic backward beats FA2's deterministic backward.
 
 The public surface mirrors `torch.nn.functional.scaled_dot_product_attention`, so adoption is a textual swap at any SDPA call site.
