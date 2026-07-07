@@ -1,5 +1,6 @@
 # FastFlashAttention
 
+[![PyPI](https://img.shields.io/pypi/v/fastflash-attention.svg)](https://pypi.org/project/fastflash-attention/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 [![CUDA: sm_120 · RTX 5090](https://img.shields.io/badge/CUDA-sm__120%20%C2%B7%20RTX%205090-76B900.svg)](#status)
@@ -25,6 +26,13 @@ An optimized **exact** attention kernel (not an approximation): fp32-faithful so
 `torch` and `triton` must already be installed with a CUDA build matching your GPU (developed on torch 2.12.1+cu130 / triton 3.7.1, CUDA 13.0). Then:
 
 ```bash
+pip install fastflash-attention
+```
+
+Or from source (add `.[bench]` for the benchmark/plot dependencies):
+
+```bash
+git clone https://github.com/AlcAI-Haven/FastFlashAttention && cd FastFlashAttention
 pip install -e .
 ```
 
