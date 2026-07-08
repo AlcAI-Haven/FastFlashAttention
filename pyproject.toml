@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastflash-attention"
-version = "0.1.0"
+version = "0.2.0"
 description = "FastFlashAttention: drop-in exact bf16 flash-attention for CUDA with a deterministic backward, tuned for Blackwell (sm_120 / RTX 5090)."
 readme = "README.md"
 requires-python = ">=3.10"

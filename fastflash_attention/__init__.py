@@ -40,7 +40,7 @@ __all__ = [
     "__version__",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 _POW2_LE_128 = frozenset((1, 2, 4, 8, 16, 32, 64, 128))
 

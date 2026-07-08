@@ -15,9 +15,9 @@ The public surface mirrors `torch.nn.functional.scaled_dot_product_attention`, s
 
 An optimized **exact** attention kernel (not an approximation): fp32-faithful softmax at the bf16 floor (~0.2% rel-L2 vs fp32), forward + backward in a single `@triton.jit` kernel family.
 
-- **Forward:** faster than FA2-default across the whole measured range — **1.07–1.30×** at D=128 causal (up to **1.78×** at short D=64), reaching **96%** of the bf16 matmul roofline at long context.
-- **Backward:** bitwise-**deterministic** by construction (disjoint writes, no global atomics). Beats FA2's *deterministic* backward by **1.2–2.3×** (D=128), and reaches **~0.80–0.96×** of FA2's *default* (non-deterministic, atomic) backward.
-- **Full training step (fwd+bwd):** beats FA2-deterministic by **1.4–2.1×**, and is roughly par with FA2-default (**0.86–1.18×**, faster at short context).
+- **Forward:** faster than FA2-default across the whole measured range — **1.06–1.34×** at D=128 causal (up to **1.70×** at short D=64), reaching **~97%** of the bf16 matmul roofline at long context.
+- **Backward:** bitwise-**deterministic** by construction (disjoint writes, no global atomics). Beats FA2's *deterministic* backward by **1.1–2.1×** (D=128), and reaches **~0.79–0.89×** of FA2's *default* (non-deterministic, atomic) backward.
+- **Full training step (fwd+bwd):** beats FA2-deterministic by **1.2–1.9×**, and is roughly par with FA2-default (**0.86–1.20×**, faster at short context).
 - **Scope:** exact attention only, with a strict input contract (below) and no hidden slow path.
 - **Hardware:** tuned for the **consumer GeForce RTX 5090 (GB202, sm_120)** — *not* datacenter Blackwell (GB100/GB200, sm_100). It uses the standard sm_120 tensor-core MMA that Triton emits, and does **not** rely on datacenter-only 5th-gen tensor-core features (`tcgen05` MMA / tensor-memory, the `sm_100a` path). It runs on other CUDA GPUs, but the autotuned block/warp choices are picked for sm_120 and may be suboptimal elsewhere.
 
@@ -78,7 +78,7 @@ Anything else raises `UnsupportedConfig` (use `is_eligible` for a non-raising ch
 
 ## Benchmarks
 
-Measured on **NVIDIA GeForce RTX 5090** (sm_120), torch 2.12.1+cu130, CUDA 13.0, flash_attn 2.8.4; **B=4, H=16**. CUDA-event timing, median over 30 iters (≥15 warmup excluded). Ratios are **FA2 / FastFlashAttention wall time — >1 means FastFlashAttention is faster.** bf16 matmul roofline ≈ **234 TF/s** (achieved, used as the %-roofline denominator).
+Measured on **NVIDIA GeForce RTX 5090** (sm_120), torch 2.12.1+cu130, CUDA 13.0, flash_attn 2.8.4; **B=4, H=16**. CUDA-event timing, median over 30 iters (≥15 warmup excluded). Ratios are **FA2 / FastFlashAttention wall time — >1 means FastFlashAttention is faster.** bf16 matmul roofline ≈ **238 TF/s** (achieved, used as the %-roofline denominator).
 
 Reproduce:
 ```bash
@@ -99,12 +99,12 @@ python -m bench.benchmark        # full grid; add --quick for a smoke test
 
 | N | FastFlashAttention (ms) | FA2 (ms) | ratio | % roofline |
 |---:|---:|---:|---:|---:|
-| 512 | 0.076 | 0.094 | **1.24×** | 24.1 |
-| 1024 | 0.152 | 0.197 | **1.30×** | 48.4 |
-| 2048 | 0.421 | 0.522 | **1.24×** | 69.7 |
-| 4096 | 1.364 | 1.590 | **1.17×** | 86.1 |
-| 8192 | 5.073 | 5.481 | **1.08×** | 92.6 |
-| 16384 | 19.476 | 20.825 | **1.07×** | 96.5 |
+| 512 | 0.073 | 0.095 | **1.29×** | 24.6 |
+| 1024 | 0.149 | 0.200 | **1.34×** | 48.5 |
+| 2048 | 0.414 | 0.518 | **1.25×** | 69.8 |
+| 4096 | 1.359 | 1.590 | **1.17×** | 85.1 |
+| 8192 | 4.966 | 5.462 | **1.10×** | 93.1 |
+| 16384 | 18.987 | 20.163 | **1.06×** | 97.4 |
 
 ### Backward (causal, D=128)
 
@@ -112,23 +112,23 @@ Both sides deterministic on the `-det` columns. `ratio_det` is the apples-to-app
 
 | N | FastFlashAttention (ms) | FA2-det (ms) | ratio_det | FA2-default (ms) | ratio_def |
 |---:|---:|---:|---:|---:|---:|
-| 512 | 0.188 | 0.229 | **1.22×** | 0.174 | 0.93× |
-| 1024 | 0.433 | 0.662 | **1.53×** | 0.374 | 0.86× |
-| 2048 | 1.085 | 2.305 | **2.12×** | 1.037 | 0.96× |
-| 4096 | 3.732 | 8.522 | **2.28×** | 3.512 | 0.94× |
-| 8192 | 15.309 | 33.384 | **2.18×** | 13.104 | 0.86× |
-| 16384 | 62.642 | 132.860 | **2.12×** | 49.935 | 0.80× |
+| 512 | 0.189 | 0.212 | **1.12×** | 0.158 | 0.84× |
+| 1024 | 0.444 | 0.688 | **1.55×** | 0.353 | 0.80× |
+| 2048 | 1.203 | 2.306 | **1.92×** | 1.075 | 0.89× |
+| 4096 | 4.176 | 8.304 | **1.99×** | 3.495 | 0.84× |
+| 8192 | 15.906 | 31.794 | **2.00×** | 12.615 | 0.79× |
+| 16384 | 60.736 | 129.294 | **2.13×** | 48.243 | 0.79× |
 
 ### Full training step, fwd+bwd (causal, D=128)
 
 | N | FastFlashAttention (ms) | FA2-det (ms) | ratio_det | FA2-default (ms) | ratio_def |
 |---:|---:|---:|---:|---:|---:|
-| 512 | 0.269 | 0.367 | **1.37×** | 0.318 | **1.18×** |
-| 1024 | 0.536 | 0.793 | **1.48×** | 0.499 | 0.93× |
-| 2048 | 1.420 | 2.725 | **1.92×** | 1.476 | **1.04×** |
-| 4096 | 5.026 | 9.908 | **1.97×** | 4.994 | 0.99× |
-| 8192 | 20.331 | 38.764 | **1.91×** | 18.497 | 0.91× |
-| 16384 | 82.334 | 170.402 | **2.07×** | 70.931 | 0.86× |
+| 512 | 0.252 | 0.312 | **1.24×** | 0.303 | **1.20×** |
+| 1024 | 0.522 | 0.816 | **1.56×** | 0.489 | 0.94× |
+| 2048 | 1.480 | 2.685 | **1.81×** | 1.478 | **1.00×** |
+| 4096 | 5.461 | 9.610 | **1.76×** | 4.976 | 0.91× |
+| 8192 | 20.799 | 37.522 | **1.80×** | 17.991 | 0.86× |
+| 16384 | 79.905 | 150.409 | **1.88×** | 68.605 | 0.86× |
 
 <details>
 <summary><b>All configurations</b> — speedup ranges across N = 512…16384 (head_dim ∈ {64, 128} × causal / non-causal)</summary>
@@ -137,18 +137,18 @@ Min–max of the FA2 / FastFlashAttention ratio over the six sequence lengths (>
 
 | Config | Forward | Backward vs FA2-det | Backward vs FA2-default | Step vs FA2-det | Step vs FA2-default |
 |---|---|---|---|---|---|
-| causal, D=128 | 1.07–1.30× | 1.22–2.28× | 0.80–0.96× | 1.37–2.07× | 0.86–1.18× |
-| causal, D=64 | 1.04–1.78× | 0.72–1.40× | 0.62–0.95× | 1.24–1.45× | 0.78–1.62× |
-| non-causal, D=128 | 1.04–1.26× | 1.13–2.36× | 0.79–0.98× | 1.20–1.98× | 0.86–1.06× |
-| non-causal, D=64 | 1.00–1.48× | 1.20–1.35× | 0.72–1.02× | 1.18–1.58× | 0.78–1.42× |
+| causal, D=128 | 1.06–1.34× | 1.12–2.13× | 0.79–0.89× | 1.24–1.88× | 0.86–1.20× |
+| causal, D=64 | 1.04–1.70× | 1.21–1.31× | 0.71–0.97× | 1.21–1.43× | 0.78–1.18× |
+| non-causal, D=128 | 1.04–1.27× | 1.16–2.19× | 0.78–0.93× | 1.44–2.09× | 0.86–1.25× |
+| non-causal, D=64 | 1.00–1.46× | 1.18–1.33× | 0.70–0.89× | 1.20–1.66× | 0.76–1.40× |
 
-Forward wins in every cell. The deterministic backward beats FA2-deterministic everywhere except the smallest D=64 case (N=512, 0.72×), and stays within ~0.6–1.0× of FA2's faster non-deterministic default. Full per-N numbers: run `python -m bench.benchmark` (writes `results/benchmark.jsonl`).
+Forward wins in every cell. The deterministic backward now beats FA2-deterministic in every measured cell (1.12–2.19×), and stays within ~0.70–0.97× of FA2's faster non-deterministic default. Full per-N numbers: run `python -m bench.benchmark` (writes `results/benchmark.jsonl`).
 
 </details>
 
 ## Memory
 
-FastFlashAttention runs natively in `[B, H, S, D]` (the SDPA layout) with output-only scratch, so **at inference it uses ~30–43% less peak VRAM than FlashAttention-2** at the same N. This is intrinsic, not a layout artifact — FA2 fed already-seq-major inputs measures the same. The training step is the deliberate trade in the other direction: the **deterministic backward stores a `dS` tile** (to avoid recomputation and global atomics — the source of its speed *and* bit-exactness), so its peak is **higher at N ≥ 2048**.
+FastFlashAttention runs natively in `[B, H, S, D]` (the SDPA layout) with output-only scratch, so **at inference it uses ~29–43% less peak VRAM than FlashAttention-2** at the same N. This is intrinsic, not a layout artifact — FA2 fed already-seq-major inputs measures the same. The training step is the deliberate trade in the other direction: the **deterministic backward stores a `dS` tile** (to avoid recomputation and global atomics — the source of its speed *and* bit-exactness), so its peak is a **flat ~19% higher at N ≥ 2048** — a shape- and head-dim-aware budget on that internal buffer keeps the overhead flat instead of growing with N.
 
 <p align="center">
   <picture>
@@ -163,12 +163,14 @@ Peak allocated VRAM (MB), causal D=128, B=4 H=16. `Δ vs FA2` is negative when F
 |---:|---:|---:|---:|---:|---:|---:|
 | 512 | 34 | 59 | **−43%** | 93 | 135 | −31% |
 | 1024 | 67 | 118 | **−43%** | 185 | 269 | −31% |
-| 2048 | 134 | 235 | **−43%** | 907 | 538 | +69% |
-| 4096 | 336 | 471 | **−29%** | 2888 | 1076 | +168% |
-| 8192 | 671 | 942 | **−29%** | 3628 | 2152 | +69% |
+| 2048 | 134 | 235 | **−43%** | 639 | 538 | +19% |
+| 4096 | 336 | 471 | **−29%** | 1277 | 1076 | +19% |
+| 8192 | 671 | 942 | **−29%** | 2554 | 2152 | +19% |
 | 16384 | 1342 | 1883 | **−29%** | 5109 | 4303 | +19% |
 
 If inference / KV-cache memory is your constraint, FastFlashAttention is a clear win; if training-step peak memory is the binding constraint at long context, that extra `dS` storage is the price of the deterministic, faster backward.
+
+**Advanced, opt-in:** if even the flat ~19% overhead above is too much and you can tolerate a non-deterministic `dQ`, an alternate single-kernel backward fuses dK/dV and dQ so the `dS` tile never leaves the chip (no `dS` buffer at any `N`; `dK`/`dV` stay deterministic). Enable it globally with `UNIFLASH_BWD_FUSED_ATOMIC=1`, or call `fastflash_attention._kernel.fastflash_attn_train_fused_atomic` directly. It is not wired into `fast_attention`/`is_eligible` by default because it trades away backward determinism.
 
 ## Determinism
 
@@ -181,6 +183,15 @@ pytest tests/     # forward+backward parity vs fp32 SDPA truth, backward determi
 ```
 
 Parity reference is `F.scaled_dot_product_attention` upcast to fp32, so the suite has no `flash_attn` dependency (that is benchmark-only).
+
+## Changelog
+
+**0.2.0**
+- Fixed a training-memory regression in the deterministic backward's internal `dS` buffer: its size cap is now shape- and head-dim-aware instead of a flat constant, which flattened a mid-sequence-length memory spike (previously up to **+168%** vs FA2-default at N=4096) down to a **flat ~19%** overhead at every N ≥ 2048.
+- Added an opt-in, non-deterministic single-kernel fused backward (`UNIFLASH_BWD_FUSED_ATOMIC=1`) for workloads that want the lowest possible training memory and can tolerate a non-deterministic `dQ`.
+- Fixed a `gc.collect()` gap in the memory benchmark harness that could overstate peak memory on a kernel's first (autotuning) invocation; all benchmark numbers above were re-measured with the fix.
+
+**0.1.0** — Initial public release.
 
 ## License
 

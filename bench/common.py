@@ -8,6 +8,7 @@ Everything here follows the pytorch-trial timing rules:
 """
 from __future__ import annotations
 
+import gc
 import json
 import platform
 import statistics
@@ -106,7 +107,28 @@ def cuda_time(fn: Callable[[], object], warmup: int = 15, iters: int = 30) -> Ti
 # Memory
 # --------------------------------------------------------------------------- #
 def peak_mem_mb(fn: Callable[[], object]) -> float:
-    """Peak *allocated* memory (MB) during a single call of ``fn``."""
+    """Peak *allocated* memory (MB) during a single call of ``fn``.
+
+    Calls ``gc.collect()`` before resetting peak stats. GOTCHA (found while
+    benchmarking an autotuned kernel that had not yet been exercised in this
+    process): a kernel's FIRST invocation for a new autotune shape-key runs
+    the tuning search (many trial configs via ``triton.testing.do_bench``),
+    and the Python-level closures/exception frames that machinery creates can
+    leave a reference CYCLE holding CUDA tensors alive -- plain refcounting
+    does not free cycles, so without an explicit collection the garbage sits
+    until Python's generational GC happens to trigger on its own (not
+    guaranteed within a handful of warmup iterations). Measured impact: a
+    kernel autotuned for the first time in-process showed a peak reading
+    ~300MB (~70%) higher than its true steady state at one shape, entirely
+    attributable to this uncollected cycle -- confirmed by reproducing the
+    same (correct, lower) number both with an explicit ``gc.collect()`` and
+    on a subsequent call after the shape was already tuned. Cheap (no-op when
+    there is nothing to collect) and never increases a *correct* reading, so
+    this is a strict accuracy fix, not a thumb on the scale for any one
+    candidate kernel.
+    """
+    torch.cuda.synchronize()
+    gc.collect()
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
     fn()
